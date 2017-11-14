@@ -21,6 +21,7 @@ import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.apache.poi.ss.util.CellRangeAddressList;
+import org.apache.poi.ss.util.CellReference;
 import org.apache.poi.xssf.usermodel.XSSFDataValidationHelper;
 import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
@@ -127,6 +128,8 @@ public class Arbitraggi {
 				((XSSFSheet) sheet).getCTWorksheet().setDataValidations(null);
 			}
 			
+			Sheet foglioConvalidaDati = workbook.getSheetAt(1);
+			int numRigaConvalidaDati = 0;
 			Iterator<Row> righe = sheet.rowIterator();
 			while (righe.hasNext()) {
 				Row riga = righe.next();
@@ -165,36 +168,48 @@ public class Arbitraggi {
 				DataValidation dv;
 				
 				if (primiArbitri != null && primiArbitri.size() > 0) {
-					String[] primiArbitriDataValidation = getArbitriDataValidation(primiArbitri);
-					dvConstraint = dvHelper.createExplicitListConstraint(primiArbitriDataValidation);
+					numRigaConvalidaDati = scriviRigaConvalidaDati(primiArbitri, foglioConvalidaDati, numRigaConvalidaDati);
+					String formula = foglioConvalidaDati.getSheetName()
+							+ "!$" + CellReference.convertNumToColString(0) + "$" + numRigaConvalidaDati
+							+ ":$" + CellReference.convertNumToColString(primiArbitri.size() - 1) + "$" + numRigaConvalidaDati;
+					dvConstraint = dvHelper.createFormulaListConstraint(formula);
 					Cell cellaPrimo = riga.getCell(PRIMO_ARBITRO_INDEX);
 					if (cellaPrimo == null) {
 						cellaPrimo = riga.createCell(PRIMO_ARBITRO_INDEX);
 					}
-					cancellaCellaSeArbitroNonDisponibile(cellaPrimo, primiArbitriDataValidation);
+					cancellaCellaSeArbitroNonDisponibile(cellaPrimo, getArbitriDataValidation(primiArbitri));
 					addressList = new CellRangeAddressList(cellaPrimo.getRowIndex(), cellaPrimo.getRowIndex(), cellaPrimo.getColumnIndex(), cellaPrimo.getColumnIndex());
 					dv = dvHelper.createValidation(dvConstraint, addressList);
 					dv.setShowErrorBox(true);
 					sheet.addValidationData(dv);
+				} else {
+					// aumento comunque il numero riga del foglio di convalida dati
+					numRigaConvalidaDati++;
 				}
 				
 				if (secondiArbitri != null && secondiArbitri.size() > 0) {
-					String[] secondiArbitriDataValidation = getArbitriDataValidation(secondiArbitri);
-					dvConstraint = dvHelper.createExplicitListConstraint(secondiArbitriDataValidation);
+					numRigaConvalidaDati = scriviRigaConvalidaDati(secondiArbitri, foglioConvalidaDati, numRigaConvalidaDati);
+					String formula = foglioConvalidaDati.getSheetName()
+							+ "!$" + CellReference.convertNumToColString(0) + "$" + numRigaConvalidaDati
+							+ ":$" + CellReference.convertNumToColString(secondiArbitri.size() - 1) + "$" + numRigaConvalidaDati;
+					dvConstraint = dvHelper.createFormulaListConstraint(formula);
 					Cell cellaSecondo = riga.getCell(SECONDO_ARBITRO_INDEX);
 					if (cellaSecondo == null) {
 						cellaSecondo = riga.createCell(SECONDO_ARBITRO_INDEX);
 					}
-					cancellaCellaSeArbitroNonDisponibile(cellaSecondo, secondiArbitriDataValidation);
+					cancellaCellaSeArbitroNonDisponibile(cellaSecondo, getArbitriDataValidation(secondiArbitri));
 					Cell cellaRefertista = riga.getCell(REFERTISTA_INDEX);
 					if (cellaRefertista == null) {
 						cellaRefertista = riga.createCell(REFERTISTA_INDEX);
 					}
-					cancellaCellaSeArbitroNonDisponibile(cellaRefertista, secondiArbitriDataValidation);
+					cancellaCellaSeArbitroNonDisponibile(cellaRefertista, getArbitriDataValidation(secondiArbitri));
 					addressList = new CellRangeAddressList(cellaSecondo.getRowIndex(), cellaRefertista.getRowIndex(), cellaSecondo.getColumnIndex(), cellaRefertista.getColumnIndex());
 					dv = dvHelper.createValidation(dvConstraint, addressList);
 					dv.setShowErrorBox(true);
 					sheet.addValidationData(dv);
+				} else {
+					// aumento comunque il numero riga del foglio di convalida dati
+					numRigaConvalidaDati++;
 				}
 			}
 			
@@ -248,16 +263,6 @@ public class Arbitraggi {
 		}
 		
 		return arbitriPossibili;
-	}
-	
-	private static String[] getArbitriDataValidation(List<Arbitro> arbitri) {
-		String[] listaArbitri = new String[arbitri.size()];
-		for (int i = 0; i < arbitri.size(); i++) {
-			Arbitro arbitro = arbitri.get(i);
-			listaArbitri[i] = arbitro.getCognome() + " " + arbitro.getNome();
-		}
-		
-		return listaArbitri;
 	}
 
 	private static boolean isSquadraCoincidente(String squadra, String squadraA, String squadraB) {
@@ -325,6 +330,26 @@ public class Arbitraggi {
 				cella.setCellValue("");
 			}
 		}
+	}
+	
+	private static String[] getArbitriDataValidation(List<Arbitro> arbitri) {
+		String[] listaArbitri = new String[arbitri.size()];
+		for (int i = 0; i < arbitri.size(); i++) {
+			Arbitro arbitro = arbitri.get(i);
+			listaArbitri[i] = arbitro.getCognome() + " " + arbitro.getNome();
+		}
+		
+		return listaArbitri;
+	}
+
+	private static int scriviRigaConvalidaDati(List<Arbitro> arbitri, Sheet foglioConvalidaDati, int numRigaConvalidaDati) {
+		Row riga = foglioConvalidaDati.createRow(numRigaConvalidaDati++);
+		int colNum = 0;
+		for (Arbitro a : arbitri) {
+			Cell cella = riga.createCell(colNum++);
+			cella.setCellValue(a.getCognome() + " " + a.getNome());
+		}
+		return numRigaConvalidaDati;
 	}
 	
 }
